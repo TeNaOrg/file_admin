@@ -1,10 +1,21 @@
 "use client";
 
 import {useState, useEffect, useRef} from "react";
-import {X, Save, Upload, Image as ImageIcon} from "lucide-react";
+import {X, Save, Upload, Image as ImageIcon, Archive} from "lucide-react";
 import {Game, AdditionalTag} from "@/lib/types";
 import {apiClient, getImageUrl} from "@/lib/api";
+import {uploadGameArchive, cancelGameArchiveUpload} from "@/lib/gameUpload";
 import toast from "react-hot-toast";
+
+const formatBytes = (bytes: number): string => {
+  if (bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const i = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1
+  );
+  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+};
 
 interface GameFormProps {
   game?: Game | null;
@@ -35,10 +46,15 @@ export default function GameForm({
   const [error, setError] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
-  const [gameImagesInput, setGameImagesInput] = useState<string>("");
   const [uploadingGameImage, setUploadingGameImage] = useState(false);
+  const [archiveFile, setArchiveFile] = useState<File | null>(null);
+  const [archiveUploading, setArchiveUploading] = useState(false);
+  const [archiveUploadedBytes, setArchiveUploadedBytes] = useState(0);
+  const [archiveTotalBytes, setArchiveTotalBytes] = useState(0);
+  const [archiveUploadId, setArchiveUploadId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const gameImagesInputRef = useRef<HTMLInputElement>(null);
+  const archiveInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -46,12 +62,19 @@ export default function GameForm({
 
       // Clear file selection state when modal opens (for both create and edit)
       setSelectedFile(null);
-      setGameImagesInput("");
       setError("");
+      setArchiveFile(null);
+      setArchiveUploading(false);
+      setArchiveUploadedBytes(0);
+      setArchiveTotalBytes(0);
+      setArchiveUploadId(null);
 
       // Clear file input field
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
+      }
+      if (archiveInputRef.current) {
+        archiveInputRef.current.value = "";
       }
 
       if (game) {
@@ -95,8 +118,12 @@ export default function GameForm({
       // Clear file selection state when modal closes
       setSelectedFile(null);
       setPreviewUrl("");
-      setGameImagesInput("");
       setError("");
+      setArchiveFile(null);
+      setArchiveUploading(false);
+      setArchiveUploadedBytes(0);
+      setArchiveTotalBytes(0);
+      setArchiveUploadId(null);
     }
   }, [isOpen, game]);
 
@@ -170,6 +197,55 @@ export default function GameForm({
     }
   };
 
+  const handleArchiveFileSelect = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setArchiveFile(file);
+    setArchiveUploading(true);
+    setArchiveUploadedBytes(0);
+    setArchiveTotalBytes(file.size);
+    setError("");
+
+    try {
+      const uploadedPath = await uploadGameArchive(
+        file,
+        (uploadedBytes, totalBytes) => {
+          setArchiveUploadedBytes(uploadedBytes);
+          setArchiveTotalBytes(totalBytes);
+        },
+        (uploadId) => setArchiveUploadId(uploadId)
+      );
+      setFormData((prev) => ({...prev, path: uploadedPath}));
+      toast.success("Archive uploaded successfully!");
+    } catch (err) {
+      const errorMessage = "Failed to upload archive. Please try again.";
+      setError(errorMessage);
+      toast.error(errorMessage);
+      console.error("Error uploading archive:", err);
+    } finally {
+      setArchiveUploading(false);
+      setArchiveUploadId(null);
+    }
+  };
+
+  const handleCancelArchiveUpload = async () => {
+    if (archiveFile && archiveUploadId) {
+      await cancelGameArchiveUpload(archiveFile, archiveUploadId);
+    }
+    setArchiveFile(null);
+    setArchiveUploading(false);
+    setArchiveUploadedBytes(0);
+    setArchiveTotalBytes(0);
+    setArchiveUploadId(null);
+    if (archiveInputRef.current) {
+      archiveInputRef.current.value = "";
+    }
+    toast.success("Upload cancelled");
+  };
+
   const uploadImage = async (file: File): Promise<string> => {
     setUploading(true);
     try {
@@ -186,6 +262,18 @@ export default function GameForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (archiveUploading) {
+      toast.error("Please wait for the archive upload to finish");
+      return;
+    }
+    if (!formData.path) {
+      const errorMessage = "Please upload a game archive first";
+      setError(errorMessage);
+      toast.error(errorMessage);
+      return;
+    }
+
     setLoading(true);
     setError("");
 
@@ -295,17 +383,6 @@ export default function GameForm({
     }
   };
 
-  const handleAddGameImage = () => {
-    if (gameImagesInput.trim()) {
-      setFormData((prev) => ({
-        ...prev,
-        gameImages: [...prev.gameImages, gameImagesInput.trim()],
-      }));
-      setGameImagesInput("");
-      toast.success("Image URL added");
-    }
-  };
-
   const handleRemoveGameImage = (index: number) => {
     setFormData((prev) => ({
       ...prev,
@@ -408,18 +485,97 @@ export default function GameForm({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Path *
+                Game Archive {!game && "*"}
               </label>
-              <input
-                type="text"
-                value={formData.path}
-                onChange={(e) =>
-                  setFormData({...formData, path: e.target.value})
-                }
-                className="input-field"
-                placeholder="/games/example"
-                required
-              />
+
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
+                <input
+                  ref={archiveInputRef}
+                  type="file"
+                  onChange={handleArchiveFileSelect}
+                  className="hidden"
+                  disabled={archiveUploading}
+                />
+
+                {archiveFile ? (
+                  <div className="space-y-3">
+                    <div className="text-sm text-gray-600 truncate">
+                      {archiveFile.name}
+                    </div>
+                    {archiveUploading ? (
+                      <>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-primary-600 h-2 rounded-full transition-all"
+                            style={{
+                              width: `${
+                                archiveTotalBytes > 0
+                                  ? Math.round(
+                                      (archiveUploadedBytes /
+                                        archiveTotalBytes) *
+                                        100
+                                    )
+                                  : 0
+                              }%`,
+                            }}
+                          />
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {formatBytes(archiveUploadedBytes)} /{" "}
+                          {formatBytes(archiveTotalBytes)}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCancelArchiveUpload}
+                          className="text-sm text-red-600 hover:text-red-700 underline"
+                        >
+                          Cancel upload
+                        </button>
+                      </>
+                    ) : (
+                      <div className="text-sm text-green-600">
+                        Uploaded — saved as {formData.path}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <Archive className="w-8 h-8 text-gray-400 mx-auto" />
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => archiveInputRef.current?.click()}
+                        className="btn-primary flex items-center mx-auto"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Choose Archive
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      ZIP, RAR, 7z, EXE — any size, resumes automatically if
+                      interrupted
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Fallback manual entry for an existing game's on-disk filename */}
+              {game && !archiveFile && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Or enter filename manually:
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.path}
+                    onChange={(e) =>
+                      setFormData({...formData, path: e.target.value})
+                    }
+                    className="input-field"
+                    placeholder="existing-file.zip"
+                  />
+                </div>
+              )}
             </div>
 
             <div>
@@ -490,23 +646,6 @@ export default function GameForm({
                 )}
               </div>
 
-              {/* Fallback URL input for existing games */}
-              {game && !selectedFile && (
-                <div className="mt-3">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Or enter image URL:
-                  </label>
-                  <input
-                    type="url"
-                    value={`${getImageUrl(formData.imageUrl)}`}
-                    onChange={(e) =>
-                      setFormData({...formData, imageUrl: e.target.value})
-                    }
-                    className="input-field"
-                    placeholder="https://example.com/image.jpg"
-                  />
-                </div>
-              )}
             </div>
 
             <div>
@@ -583,41 +722,6 @@ export default function GameForm({
                   </p>
                 </div>
 
-                {/* Or Manual URL Entry */}
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-300"></div>
-                  </div>
-                  <div className="relative flex justify-center text-xs">
-                    <span className="px-2 bg-white text-gray-500">
-                      Or enter URL manually
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={gameImagesInput}
-                    onChange={(e) => setGameImagesInput(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddGameImage();
-                      }
-                    }}
-                    className="input-field flex-1"
-                    placeholder="Enter image URL"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddGameImage}
-                    className="btn-secondary whitespace-nowrap"
-                  >
-                    Add URL
-                  </button>
-                </div>
-
                 {/* Image List */}
                 {formData.gameImages.length > 0 && (
                   <div className="border border-gray-200 rounded-lg p-3 space-y-2 max-h-40 overflow-y-auto">
@@ -691,11 +795,13 @@ export default function GameForm({
               </button>
               <button
                 type="submit"
-                disabled={loading || uploading}
+                disabled={loading || uploading || archiveUploading}
                 className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
               >
                 <Save className="w-4 h-4 mr-2" />
-                {uploading
+                {archiveUploading
+                  ? "Uploading archive..."
+                  : uploading
                   ? "Uploading..."
                   : loading
                   ? "Saving..."

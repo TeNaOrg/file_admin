@@ -34,10 +34,8 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
         credentials.password
       );
 
-      // Assuming the API returns a token or success indicator
-      if (response.success || response.token) {
-        const token = response.token || "authenticated"; // Fallback if no token returned
-        Cookies.set("admin_token", token, {expires: 7}); // 7 days
+      if (response.success && response.data?.accessToken) {
+        Cookies.set("admin_token", response.data.accessToken, {expires: 7}); // 7 days
         setIsAuthenticated(true);
         return true;
       }

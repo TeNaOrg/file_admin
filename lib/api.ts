@@ -52,7 +52,11 @@ class ApiClient {
     this.client.interceptors.response.use(
       (response) => response,
       (error) => {
-        if (error.response?.status === 401) {
+        // Skip the login request itself: a 401 there just means wrong
+        // credentials (handled inline by the login form) — it must not
+        // trigger a hard redirect back to the page it was submitted from.
+        const isLoginRequest = error.config?.url === "/auth/login";
+        if (error.response?.status === 401 && !isLoginRequest) {
           // Clear token and redirect to login
           Cookies.remove("admin_token");
           window.location.href = "/login";
@@ -64,34 +68,11 @@ class ApiClient {
 
   // Auth methods
   async login(username: string, password: string) {
-    // Try multiple possible login endpoints
-    const endpoints = [
-      "/admin/auth/login",
-      "/admin/login",
-      "/auth/login",
-      "/adminAuth/login",
-      "/userAuth/login",
-    ];
-
-    for (const endpoint of endpoints) {
-      try {
-        console.log(`Trying login endpoint: ${endpoint}`);
-        const response = await this.client.post(endpoint, {
-          username,
-          password,
-        });
-        console.log(`Success with endpoint: ${endpoint}`, response.data);
-        return response.data;
-      } catch (error) {
-        console.log(
-          `Failed with endpoint: ${endpoint}`
-          // error.response?.status
-        );
-        // Continue to next endpoint
-      }
-    }
-
-    throw new Error("All login endpoints failed");
+    const response = await this.client.post("/auth/login", {
+      username,
+      password,
+    });
+    return response.data;
   }
 
   // Games methods
@@ -199,6 +180,57 @@ class ApiClient {
     const response = await this.client.put(
       "/admin/user/set_subscription",
       requestData
+    );
+    return response.data;
+  }
+
+  // Game archive (chunked) upload methods
+  async initGameUpload(originalFilename: string, totalSize: number) {
+    const response = await this.client.post(
+      "/admin/games/upload/archive/init",
+      {originalFilename, totalSize}
+    );
+    return response.data;
+  }
+
+  async uploadGameUploadChunk(
+    uploadId: string,
+    offset: number,
+    chunk: Blob,
+    onUploadProgress?: (loaded: number) => void
+  ) {
+    const response = await this.client.put(
+      `/admin/games/upload/archive/${uploadId}/chunk`,
+      chunk,
+      {
+        params: {offset},
+        headers: {"Content-Type": "application/octet-stream"},
+        timeout: 120000,
+        onUploadProgress: onUploadProgress
+          ? (event) => onUploadProgress(event.loaded)
+          : undefined,
+      }
+    );
+    return response.data;
+  }
+
+  async getGameUploadStatus(uploadId: string) {
+    const response = await this.client.get(
+      `/admin/games/upload/archive/${uploadId}/status`
+    );
+    return response.data;
+  }
+
+  async completeGameUpload(uploadId: string) {
+    const response = await this.client.post(
+      `/admin/games/upload/archive/${uploadId}/complete`
+    );
+    return response.data;
+  }
+
+  async cancelGameUpload(uploadId: string) {
+    const response = await this.client.delete(
+      `/admin/games/upload/archive/${uploadId}`
     );
     return response.data;
   }
