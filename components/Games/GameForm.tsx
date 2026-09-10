@@ -2,10 +2,18 @@
 
 import {useState, useEffect, useRef} from "react";
 import {X, Save, Upload, Image as ImageIcon, Archive} from "lucide-react";
-import {Game, AdditionalTag} from "@/lib/types";
+import {Game, AdditionalTag, SystemRequirements} from "@/lib/types";
 import {apiClient, getImageUrl} from "@/lib/api";
 import {uploadGameArchive, cancelGameArchiveUpload} from "@/lib/gameUpload";
 import toast from "react-hot-toast";
+
+const EMPTY_SYSTEM_REQUIREMENTS: SystemRequirements = {
+  os: "",
+  processor: "",
+  memory: "",
+  graphics: "",
+  storage: "",
+};
 
 const formatBytes = (bytes: number): string => {
   if (bytes <= 0) return "0 B";
@@ -39,6 +47,7 @@ export default function GameForm({
     additionalTags: [] as string[],
     youtubeLink: "",
     gameImages: [] as string[],
+    systemRequirements: EMPTY_SYSTEM_REQUIREMENTS,
   });
   const [availableTags, setAvailableTags] = useState<AdditionalTag[]>([]);
   const [loading, setLoading] = useState(false);
@@ -99,6 +108,10 @@ export default function GameForm({
           additionalTags: tagIds,
           youtubeLink: game.youtubeLink || "",
           gameImages: game.gameImages || [],
+          systemRequirements: {
+            ...EMPTY_SYSTEM_REQUIREMENTS,
+            ...game.systemRequirements,
+          },
         });
         setPreviewUrl(getImageUrl(game.imageUrl));
       } else {
@@ -111,6 +124,7 @@ export default function GameForm({
           additionalTags: [],
           youtubeLink: "",
           gameImages: [],
+          systemRequirements: EMPTY_SYSTEM_REQUIREMENTS,
         });
         setPreviewUrl("");
       }
@@ -681,6 +695,75 @@ export default function GameForm({
                 className="input-field"
                 placeholder="https://youtube.com/watch?v=..."
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                System Requirements
+              </label>
+              <p className="text-xs text-gray-500 mb-3">
+                All optional. Leave any field blank to hide it on the
+                storefront.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(
+                  [
+                    ["os", "OS"],
+                    ["processor", "Processor"],
+                    ["memory", "Memory (RAM)"],
+                    ["graphics", "Graphics (GPU)"],
+                  ] as const
+                ).map(([field, label]) => (
+                  <div key={field}>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      {label}
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.systemRequirements[field]}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          systemRequirements: {
+                            ...formData.systemRequirements,
+                            [field]: e.target.value,
+                          },
+                        })
+                      }
+                      className="input-field"
+                      placeholder={
+                        field === "os"
+                          ? "e.g. Windows 10 64-bit"
+                          : field === "processor"
+                          ? "e.g. Intel Core i5-6600K"
+                          : field === "memory"
+                          ? "e.g. 8 GB RAM"
+                          : "e.g. NVIDIA GTX 1060 6GB"
+                      }
+                    />
+                  </div>
+                ))}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Storage
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.systemRequirements.storage}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        systemRequirements: {
+                          ...formData.systemRequirements,
+                          storage: e.target.value,
+                        },
+                      })
+                    }
+                    className="input-field"
+                    placeholder="e.g. 50 GB available space"
+                  />
+                </div>
+              </div>
             </div>
 
             <div>

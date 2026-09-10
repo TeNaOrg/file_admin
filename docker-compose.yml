@@ -1,0 +1,23 @@
+services:
+  admin:
+    build:
+      context: .
+      args:
+        # Baked into the client bundle at build time — this is the URL the
+        # ADMIN'S BROWSER will call, not a server-side address. For a real
+        # deployment (accessed from other machines) this must be the
+        # backend's public URL/domain, not "localhost".
+        #
+        # Override without editing this file:
+        #   NEXT_PUBLIC_API_BASE_URL=https://api.example.com docker compose up --build
+        # or create a `.env` file next to this one (docker-compose reads it
+        # automatically for ${...} substitution — separate mechanism from
+        # Next.js's own .env.local, which only affects `next dev`/local
+        # `next build` and is never used inside the container).
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:9000}
+    container_name: file_admin
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production

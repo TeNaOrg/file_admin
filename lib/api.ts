@@ -1,5 +1,6 @@
 import axios, {AxiosInstance, AxiosRequestConfig} from "axios";
 import Cookies from "js-cookie";
+import {SystemRequirements} from "./types";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://202.180.218.186:9000/";
@@ -101,6 +102,7 @@ class ApiClient {
     additionalTags: string[];
     youtubeLink?: string;
     gameImages?: string[];
+    systemRequirements?: SystemRequirements;
   }) {
     const response = await this.client.post("/admin/games/game", gameData);
     return response.data;
@@ -116,6 +118,7 @@ class ApiClient {
     additionalTags: string[];
     youtubeLink?: string;
     gameImages?: string[];
+    systemRequirements?: SystemRequirements;
   }) {
     const response = await this.client.put("/admin/games/game", gameData);
     return response.data;
@@ -181,6 +184,23 @@ class ApiClient {
       "/admin/user/set_subscription",
       requestData
     );
+    return response.data;
+  }
+
+  // Bank info methods
+  async getBankInfo() {
+    const response = await this.client.get("/admin/bank-info");
+    return response.data;
+  }
+
+  async updateBankInfo(bankInfo: {
+    bankName: string;
+    accountNumber: string;
+    accountHolderName: string;
+    amount: number;
+    currency: string;
+  }) {
+    const response = await this.client.put("/admin/bank-info", bankInfo);
     return response.data;
   }
 

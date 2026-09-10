@@ -1,3 +1,11 @@
+export interface SystemRequirements {
+  os?: string;
+  processor?: string;
+  memory?: string;
+  graphics?: string;
+  storage?: string;
+}
+
 export interface Game {
   _id: string;
   title: string;
@@ -8,6 +16,7 @@ export interface Game {
   additionalTags: (string | AdditionalTag)[];
   youtubeLink?: string;
   gameImages?: string[];
+  systemRequirements?: SystemRequirements;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -30,6 +39,14 @@ export interface User {
   isSubscribed: boolean;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface BankInfo {
+  bankName: string;
+  accountNumber: string;
+  accountHolderName: string;
+  amount: number;
+  currency: string;
 }
 
 export interface LoginCredentials {

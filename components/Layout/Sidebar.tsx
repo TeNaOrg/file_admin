@@ -7,6 +7,7 @@ import {
   Gamepad2,
   Tags,
   Users,
+  Landmark,
   LogOut,
   Menu,
   X,
@@ -34,6 +35,11 @@ const navigation = [
     name: "Users",
     href: "/dashboard/users",
     icon: Users,
+  },
+  {
+    name: "Bank Settings",
+    href: "/dashboard/bank-settings",
+    icon: Landmark,
   },
 ];
 
